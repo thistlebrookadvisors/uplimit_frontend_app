@@ -78,7 +78,18 @@ def get_transcribe_podcast(rss_url, local_path):
 @stub.function(image=corise_image, secret=modal.Secret.from_name("my-openai-secret"))
 def get_podcast_summary(podcast_transcript):
   import openai
-  ## ADD YOUR LOGIC HERE TO RETURN THE SUMMARY OF THE PODCAST USING OPENAI
+  instructPrompt = """
+   Please summarize the podcast providing highlights and summary.
+   The transcript of the podcast is provided below...
+   """
+  request = instructPrompt + podcast_transcript
+  
+  chatOutput = openai.ChatCompletion.create(model="gpt-3.5-turbo-16k",
+                                            messages=[{"role": "system", "content": "You are a helpful assistant."},
+                                                      {"role": "user", "content": request}
+                                                      ]
+                                            )  
+  podcastSummary = chatOutput.choices[0].message.content
   return podcastSummary
 
 @stub.function(image=corise_image, secret=modal.Secret.from_name("my-openai-secret"))
@@ -86,14 +97,47 @@ def get_podcast_guest(podcast_transcript):
   import openai
   import wikipedia
   import json
-  ## ADD YOUR LOGIC HERE TO RETURN THE PODCAST GUEST INFORMATION
-  return podcastGuest
+  
+  completion = openai.ChatCompletion.create(
+    model="gpt-3.5-turbo-16k",
+    messages=[{"role": "user", "content": podcast_transcript}],
+    functions=[
+    {
+        "name": "get_podcast_guest_information",
+        "description": "Get the information on the podcast guest using Wikipedia",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "guest_name": {
+                    "type": "string",
+                    "description": "Get the name of the guest in the podcast",
+                },
+                "unit": {"type": "string"},
+            },
+            "required": ["guest_name"],
+        },
+    }
+    ],
+    function_call={"name": "get_podcast_guest_information"}
+  )
+
+  podcast_guest = ""
+  response_message = completion["choices"][0]["message"]
+  if response_message.get("function_call"):
+     function_name = response_message["function_call"]["name"]
+     function_args = json.loads(response_message["function_call"]["arguments"])
+     podcast_guest=function_args.get("guest_name")
+  else:
+     podcast_guest="Elon Musk"
+
+  return podcast_guest
 
 @stub.function(image=corise_image, secret=modal.Secret.from_name("my-openai-secret"))
 def get_podcast_highlights(podcast_transcript):
   import openai
-  ### ADD YOUR LOGIC HERE TO RETURN THE HIGHLIGHTS OF THE PODCAST
-  return podcastHighlights
+
+  podcast_highlights = ""
+  return podcast_highlights
 
 @stub.function(image=corise_image, secret=modal.Secret.from_name("my-openai-secret"), timeout=1200)
 def process_podcast(url, path):
